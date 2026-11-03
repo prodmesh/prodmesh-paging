@@ -29,7 +29,7 @@
     <div class="topbar">
       <div>
         <h1>Page a parent</h1>
-        <p class="sub">Type the 4-character code from the child's sticker and press PAGE.</p>
+        <p class="sub">Type the <span id="code-len">4</span>-character code from the child's sticker and press PAGE.</p>
       </div>
       <button id="logout" class="secondary" type="button">Log out</button>
     </div>
@@ -60,6 +60,17 @@
   let skew = 0; // server clock minus ours, so "clears in" is right on a drifting PC
   let online = false;
   let config = null;
+  const codeLength = () => config?.codeLength ?? 4;
+
+  // The code box follows the configured length: maxlength, placeholder dots
+  // and the instruction text all change when tech changes it.
+  function applyCodeLength() {
+    const n = codeLength();
+    $('code').maxLength = n;
+    $('code').placeholder = '·'.repeat(n);
+    $('code-len').textContent = n;
+    if ($('code').value.length > n) $('code').value = $('code').value.slice(0, n);
+  }
 
   function show(which) {
     $('login').hidden = which !== 'login';
@@ -104,7 +115,7 @@
   $('code').addEventListener('input', () => {
     const raw = $('code').value.toUpperCase().replace(/\s+/g, '');
     const bad = [...raw].find((c) => !CODE_ALPHABET.includes(c));
-    $('code').value = [...raw].filter((c) => CODE_ALPHABET.includes(c)).join('').slice(0, 4);
+    $('code').value = [...raw].filter((c) => CODE_ALPHABET.includes(c)).join('').slice(0, codeLength());
     $('page-error').textContent = bad
       ? ('O0I1'.includes(bad) ? `Codes never use ${bad}. Check the sticker again.` : `"${bad}" can't be in a code.`)
       : '';
@@ -114,8 +125,8 @@
   $('page-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const code = $('code').value;
-    if (code.length !== 4) {
-      $('page-error').textContent = 'Codes are 4 characters.';
+    if (code.length !== codeLength()) {
+      $('page-error').textContent = `Codes are ${codeLength()} characters.`;
       return;
     }
     $('page-btn').disabled = true;
@@ -193,6 +204,7 @@
         skew = data.serverNow - Date.now();
       } else {
         config = data;
+        applyCodeLength();
       }
       renderActive();
     },

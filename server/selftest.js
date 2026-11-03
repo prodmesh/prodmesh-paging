@@ -104,6 +104,21 @@ export async function selftest() {
     });
     check('config clamps bad values', r.data.autoClearMinutes === 1 && r.data.display.codeSizeVh === 60 && r.data.display.position === 'top-right', r.data);
     check('config keeps good values', r.data.rotateSeconds === 6, r.data);
+    check('code length defaults to 4', r.data.codeLength === 4, r.data);
+
+    r = await call('PUT', '/api/config', { body: { codeLength: 9, display: { position: 'top-both' } }, token: admin });
+    check('code length clamps to 6', r.data.codeLength === 6, r.data);
+    check('mirrored position accepted', r.data.display.position === 'top-both', r.data);
+
+    r = await call('PUT', '/api/config', { body: { codeLength: 6 }, token: admin });
+    r = await call('POST', '/api/pages', { body: { code: '2X3Y' }, token: nursery });
+    check('wrong-length code refused', r.status === 400 && /6 characters/.test(r.data.error), r);
+    r = await call('POST', '/api/pages', { body: { code: '2x3yk7' }, token: nursery });
+    check('configured-length code accepted', r.status === 200 && r.data.page.code === '2X3YK7', r);
+
+    r = await call('PUT', '/api/config', { body: { codeLength: 2 }, token: admin });
+    r = await call('POST', '/api/pages', { body: { code: 'K7' }, token: nursery });
+    check('2-character code accepted', r.status === 200 && r.data.page.code === 'K7', r);
 
     r = await call('GET', '/api/log', { token: admin });
     const actions = r.data.entries.map((e) => e.action);

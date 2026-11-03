@@ -1,7 +1,7 @@
 # ProdMesh Paging
 
 Nursery visual paging for church video systems. A volunteer types a child's
-4-character code and presses **PAGE**. The code then appears as white text on
+paging code and presses **PAGE**. The code then appears as white text on
 a black frame, which the ATEM keys onto the building feed and projectors.
 
 | Page | Who uses it | What it does |
@@ -36,7 +36,11 @@ On first run, open `/admin` and choose a nursery PIN and an admin PIN.
 
 ## Behaviour
 
-- Codes are 4 characters using `A–Z` and `2–9`, but never O, 0, I or 1.
+- Codes are 2–6 characters (4 by default; tech sets this at `/admin`) using
+  `A–Z` and `2–9`, but never O, 0, I or 1.
+- The key can sit in any corner, the center, or **both top corners (or both
+  bottom corners) at once**. With both, each screen masks the side it wants
+  off a single key output.
 - Paging a code that is already showing restarts its timer instead of adding
   it twice.
 - Pages clear themselves after the auto-clear time (10 minutes by default),

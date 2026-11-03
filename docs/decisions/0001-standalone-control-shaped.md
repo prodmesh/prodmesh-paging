@@ -52,7 +52,7 @@ trigger a 30-second lockout. Every page, renew, clear and timeout is logged
 with the time, the station name and the client address, so mistakes can be
 traced without adding any friction for volunteers.
 
-**Codes are exactly four characters from `A–Z 2–9` without O, 0, I or 1**,
+**Codes are four characters by default (see below) from `A–Z 2–9` without O, 0, I or 1**,
 because those pairs can't be told apart on a projector from the back row.
 
 **State is plain files** in `var/`: config, active pages, sessions, and a
@@ -83,3 +83,14 @@ cleared.
   second output alongside `/key`.
 - Publishing pages into ProdMesh-Control's feed or audit log.
 - Checking codes against Planning Center Check-Ins.
+
+## Addendum — configurable length and mirrored corners (2026-11-03)
+
+- **Code length is a setting from 2 to 6, defaulting to 4.** Paging has to
+  accept whatever the check-in labels print, so tech sets the length to match.
+  The nursery page reads it from `paging:display` and resizes the input. Pages
+  already on screen are unaffected when the length changes.
+- **New positions `top-both` and `bottom-both`** draw the same code in both
+  corners of the key output. Different screens fed from the one keyed feed can
+  each mask to the side that suits them, so there's no need for a second
+  output or keyer.

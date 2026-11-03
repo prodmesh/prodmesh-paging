@@ -4,19 +4,33 @@
 // Sizes are container-query units (cqh = 1% of the frame's height), so a
 // 320-pixel preview and a 1080p output scale identically.
 
-const PLACE = {
-  'top-right': { top: 1, right: 1, align: 'right' },
-  'top-left': { top: 1, left: 1, align: 'left' },
-  'bottom-right': { bottom: 1, right: 1, align: 'right' },
-  'bottom-left': { bottom: 1, left: 1, align: 'left' },
-  center: { center: true, align: 'center' },
+const TL = { top: 1, left: 1, align: 'left' };
+const TR = { top: 1, right: 1, align: 'right' };
+const BL = { bottom: 1, left: 1, align: 'left' };
+const BR = { bottom: 1, right: 1, align: 'right' };
+
+// The "both" positions draw the same code in two corners. One key output then
+// serves screens that each mask to a different side — a left projector keeps
+// the left copy, a right one the right.
+const PLACES = {
+  'top-right': [TR],
+  'top-left': [TL],
+  'top-both': [TL, TR],
+  'bottom-right': [BR],
+  'bottom-left': [BL],
+  'bottom-both': [BL, BR],
+  center: [{ center: true, align: 'center' }],
 };
 
 export function renderKey(frame, code, display) {
   frame.replaceChildren();
   if (!code || !display) return;
+  for (const place of PLACES[display.position] ?? PLACES['top-right']) {
+    frame.append(drawBox(place, code, display));
+  }
+}
 
-  const place = PLACE[display.position] ?? PLACE['top-right'];
+function drawBox(place, code, display) {
   const box = document.createElement('div');
   box.className = 'key-box';
   box.style.textAlign = place.align;
@@ -40,6 +54,5 @@ export function renderKey(frame, code, display) {
   text.style.fontSize = `${display.codeSizeVh}cqh`;
   text.textContent = code;
   box.append(text);
-
-  frame.append(box);
+  return box;
 }

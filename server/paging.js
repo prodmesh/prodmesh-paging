@@ -7,11 +7,18 @@ import crypto from 'node:crypto';
 // squinting at a projector from row 30 cannot tell those apart, and neither
 // can a volunteer reading a smudged sticker.
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-export const CODE_LENGTH = 4;
+// Length is set by tech to match whatever the check-in labels print.
+export const MIN_CODE_LENGTH = 2;
+export const MAX_CODE_LENGTH = 6;
 
-export const POSITIONS = ['top-right', 'top-left', 'bottom-right', 'bottom-left', 'center'];
+export const POSITIONS = [
+  'top-right', 'top-left', 'top-both',
+  'bottom-right', 'bottom-left', 'bottom-both',
+  'center',
+];
 
 export const DEFAULT_CONFIG = {
+  codeLength: 4,
   autoClearMinutes: 10,
   rotateSeconds: 4,
   display: {
@@ -26,10 +33,10 @@ export const DEFAULT_CONFIG = {
   pins: { nursery: null, admin: null },
 };
 
-export function normalizeCode(raw) {
+export function normalizeCode(raw, length) {
   const code = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
-  if (code.length !== CODE_LENGTH) {
-    return { error: `Codes are ${CODE_LENGTH} characters.` };
+  if (code.length !== length) {
+    return { error: `Codes are ${length} characters.` };
   }
   const bad = [...code].filter((c) => !CODE_ALPHABET.includes(c));
   if (bad.length) {
@@ -55,6 +62,7 @@ export function sanitizeConfig(input, base) {
   const bd = base.display;
   return {
     ...base,
+    codeLength: Math.round(clamp(input?.codeLength, MIN_CODE_LENGTH, MAX_CODE_LENGTH, base.codeLength)),
     autoClearMinutes: Math.round(clamp(input?.autoClearMinutes, 1, 120, base.autoClearMinutes)),
     rotateSeconds: clamp(input?.rotateSeconds, 1, 30, base.rotateSeconds),
     display: {
@@ -117,7 +125,7 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   }
 
   function page(raw, who) {
-    const { code, error } = normalizeCode(raw);
+    const { code, error } = normalizeCode(raw, config.codeLength);
     if (error) return { error };
     const t = now();
     const expiresAt = t + config.autoClearMinutes * 60_000;
@@ -169,6 +177,7 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   // ── Config ──
 
   const publicConfig = () => ({
+    codeLength: config.codeLength,
     autoClearMinutes: config.autoClearMinutes,
     rotateSeconds: config.rotateSeconds,
     display: config.display,

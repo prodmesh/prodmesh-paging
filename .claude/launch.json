@@ -6,6 +6,13 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server/index.js"],
       "port": 8522
+    },
+    {
+      "name": "paging-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "PORT=8532 PAGING_DATA=var-dev node server/index.js"],
+      "port": 8532,
+      "autoPort": false
     }
   ]
 }

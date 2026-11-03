@@ -57,6 +57,7 @@
     <form id="config-form" class="panel">
       <h2>Settings</h2>
       <div class="row">
+        <div><label for="codeLength">Code length (characters)</label><input id="codeLength" type="number" min="2" max="6" step="1"></div>
         <div><label for="autoClearMinutes">Auto-clear after (minutes)</label><input id="autoClearMinutes" type="number" min="1" max="120" step="1"></div>
         <div><label for="rotateSeconds">Seconds per code when several are up</label><input id="rotateSeconds" type="number" min="1" max="30" step="0.5"></div>
       </div>
@@ -68,8 +69,10 @@
           <select id="position">
             <option value="top-right">Top right</option>
             <option value="top-left">Top left</option>
+            <option value="top-both">Top left + top right</option>
             <option value="bottom-right">Bottom right</option>
             <option value="bottom-left">Bottom left</option>
+            <option value="bottom-both">Bottom left + bottom right</option>
             <option value="center">Center</option>
           </select>
         </div>
@@ -175,6 +178,7 @@
 
   function formConfig() {
     return {
+      codeLength: Number($('codeLength').value),
       autoClearMinutes: Number($('autoClearMinutes').value),
       rotateSeconds: Number($('rotateSeconds').value),
       display: {
@@ -188,6 +192,7 @@
   }
 
   function fillForm(c) {
+    $('codeLength').value = c.codeLength;
     $('autoClearMinutes').value = c.autoClearMinutes;
     $('rotateSeconds').value = c.rotateSeconds;
     $('position').value = c.display.position;
@@ -198,7 +203,13 @@
     drawPreview();
   }
 
-  const drawPreview = () => renderKey($('preview'), '2X3Y', formConfig().display);
+  // Sample code at the configured length, so size and margins are judged on
+  // the widest thing that will actually go out.
+  const SAMPLE = '2X3YK7';
+  const drawPreview = () => {
+    const c = formConfig();
+    renderKey($('preview'), SAMPLE.slice(0, Math.min(6, Math.max(2, c.codeLength || 4))), c.display);
+  };
 
   $('config-form').addEventListener('input', () => {
     dirty = true;
