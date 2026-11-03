@@ -23,6 +23,9 @@ port, bind address or data folder (the default folder is `./var`).
 
 On first run, open `/admin` and choose a nursery PIN and an admin PIN.
 
+For a Raspberry Pi that runs the server and drives the key output over
+HDMI, see [docs/raspberry-pi.md](docs/raspberry-pi.md).
+
 ## Hooking it up
 
 1. **Booth machine:** open `http://<server>:8522/key` in a browser, go full

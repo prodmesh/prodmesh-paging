@@ -1,0 +1,30 @@
+# systemd unit for the paging server. install.sh fills in @USER@, @DIR@ and @NODE@
+# and installs it as /etc/systemd/system/prodmesh-paging.service.
+
+[Unit]
+Description=ProdMesh Paging server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=@NODE@ server/index.js
+Environment=PORT=8522
+Environment=PAGING_DATA=/var/lib/prodmesh-paging
+# Creates /var/lib/prodmesh-paging owned by User=. The data lives outside the
+# clone so `git pull`, or re-cloning, never touches PINs or the log.
+StateDirectory=prodmesh-paging
+
+# A crash mid-service must not need someone to walk to the booth.
+Restart=always
+RestartSec=2
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
