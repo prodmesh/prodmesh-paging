@@ -1,0 +1,30 @@
+/* Shared by /key and the admin preview. */
+
+.key-frame {
+  position: relative;
+  container-type: size;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.key-box {
+  position: absolute;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.key-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.25em;
+}
+
+.key-code {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}

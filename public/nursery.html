@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nursery Paging</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="offline" class="banner" hidden>Not connected to the paging server. Pages will NOT show. Call tech.</div>
+
+<main>
+  <!-- Login: once per browser -->
+  <section id="login" hidden>
+    <h1>Nursery Paging</h1>
+    <p class="sub">Enter the nursery PIN to set up this computer. You only do this once.</p>
+    <form id="login-form" class="panel">
+      <label for="pin">Nursery PIN</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" required>
+      <label for="station">Name for this computer</label>
+      <input id="station" value="Nursery" maxlength="40">
+      <button class="page-btn" type="submit">Continue</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- Paging -->
+  <section id="paging" hidden>
+    <div class="topbar">
+      <div>
+        <h1>Page a parent</h1>
+        <p class="sub">Type the 4-character code from the child's sticker and press PAGE.</p>
+      </div>
+      <button id="logout" class="secondary" type="button">Log out</button>
+    </div>
+
+    <form id="page-form" class="panel" autocomplete="off">
+      <input id="code" class="code-input" maxlength="4" autocapitalize="characters" spellcheck="false" placeholder="····" aria-label="Paging code">
+      <button id="page-btn" class="page-btn" type="submit">PAGE</button>
+      <p id="page-error" class="error"></p>
+      <p id="page-flash" class="flash"></p>
+    </form>
+
+    <div class="panel">
+      <h2>On screen now</h2>
+      <ul id="active" class="active-list"></ul>
+      <p id="clear-note" class="note"></p>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { api, connect, loadToken, saveToken, CODE_ALPHABET, minutesAgo, minutesLeft } from '/static/lib.js';
+
+  const TOKEN_KEY = 'paging.nurseryToken';
+  const $ = (id) => document.getElementById(id);
+
+  let token = loadToken(TOKEN_KEY);
+  let pages = [];
+  let skew = 0; // server clock minus ours, so "clears in" is right on a drifting PC
+  let online = false;
+  let config = null;
+
+  function show(which) {
+    $('login').hidden = which !== 'login';
+    $('paging').hidden = which !== 'paging';
+    if (which === 'login') $('pin').focus();
+    if (which === 'paging') $('code').focus();
+  }
+
+  function loggedOut() {
+    token = null;
+    saveToken(TOKEN_KEY, null);
+    show('login');
+  }
+
+  // ── Login ──
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await api('POST', '/api/session', {
+      body: { role: 'nursery', pin: $('pin').value, station: $('station').value },
+    });
+    if (!r.ok) {
+      $('login-error').textContent = r.data.error ?? 'Could not log in.';
+      return;
+    }
+    token = r.data.token;
+    saveToken(TOKEN_KEY, token);
+    $('pin').value = '';
+    $('login-error').textContent = '';
+    show('paging');
+  });
+
+  $('logout').addEventListener('click', async () => {
+    await api('DELETE', '/api/session', { token });
+    loggedOut();
+  });
+
+  // ── Code entry ──
+  // Filter as they type: upper-case, drop spaces, and say immediately when a
+  // character can't be in a code instead of waiting for the server to refuse.
+
+  $('code').addEventListener('input', () => {
+    const raw = $('code').value.toUpperCase().replace(/\s+/g, '');
+    const bad = [...raw].find((c) => !CODE_ALPHABET.includes(c));
+    $('code').value = [...raw].filter((c) => CODE_ALPHABET.includes(c)).join('').slice(0, 4);
+    $('page-error').textContent = bad
+      ? ('O0I1'.includes(bad) ? `Codes never use ${bad}. Check the sticker again.` : `"${bad}" can't be in a code.`)
+      : '';
+    $('page-flash').textContent = '';
+  });
+
+  $('page-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('code').value;
+    if (code.length !== 4) {
+      $('page-error').textContent = 'Codes are 4 characters.';
+      return;
+    }
+    $('page-btn').disabled = true;
+    const r = await api('POST', '/api/pages', { body: { code }, token });
+    $('page-btn').disabled = !online;
+    if (r.status === 401) return loggedOut();
+    if (!r.ok) {
+      $('page-error').textContent = r.data.error ?? 'Could not page.';
+      return;
+    }
+    $('code').value = '';
+    $('page-error').textContent = '';
+    $('page-flash').textContent = r.data.renewed
+      ? `${code} was already up. Its timer has restarted.`
+      : `${code} is on the screens.`;
+    $('code').focus();
+  });
+
+  // ── Active list ──
+  // Clearing takes two taps so a brushed button doesn't take a page down
+  // before the parent has seen it.
+
+  const armed = new Map(); // code -> timeout
+
+  function renderActive() {
+    const list = $('active');
+    list.replaceChildren();
+    if (!pages.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'Nothing is on screen.';
+      list.append(li);
+    }
+    const t = Date.now() + skew;
+    for (const p of pages) {
+      const li = document.createElement('li');
+      const code = document.createElement('span');
+      code.className = 'active-code';
+      code.textContent = p.code;
+      const meta = document.createElement('span');
+      meta.className = 'active-meta';
+      meta.textContent = `Paged ${minutesAgo(t - p.pagedAt)} · clears in ${minutesLeft(p.expiresAt - t)}`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = armed.has(p.code) ? 'danger' : 'secondary';
+      btn.textContent = armed.has(p.code) ? 'Tap again to clear' : 'Clear';
+      btn.disabled = !online;
+      btn.addEventListener('click', () => clearPage(p.code));
+      li.append(code, meta, btn);
+      list.append(li);
+    }
+    $('clear-note').textContent = config
+      ? `Pages clear themselves after ${config.autoClearMinutes} minutes. Clear one as soon as the parent arrives.`
+      : '';
+  }
+
+  async function clearPage(code) {
+    if (!armed.has(code)) {
+      armed.set(code, setTimeout(() => { armed.delete(code); renderActive(); }, 3000));
+      renderActive();
+      return;
+    }
+    clearTimeout(armed.get(code));
+    armed.delete(code);
+    const r = await api('DELETE', `/api/pages/${encodeURIComponent(code)}`, { token });
+    if (r.status === 401) return loggedOut();
+  }
+
+  setInterval(renderActive, 15_000);
+
+  connect(['paging:active', 'paging:display'], {
+    onTopic(topic, data) {
+      if (topic === 'paging:active') {
+        pages = data.pages;
+        skew = data.serverNow - Date.now();
+      } else {
+        config = data;
+      }
+      renderActive();
+    },
+    onStatus(up) {
+      online = up;
+      $('offline').hidden = up;
+      $('page-btn').disabled = !up;
+      renderActive();
+    },
+  });
+
+  // ── Start ──
+
+  if (!token) show('login');
+  else {
+    const r = await api('GET', '/api/session', { token });
+    if (r.ok && r.data.role) show('paging');
+    else if (r.status === 0) show('paging'); // server down: keep the page; the banner says why
+    else loggedOut();
+  }
+</script>
+</body>
+</html>

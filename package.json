@@ -1,0 +1,12 @@
+{
+  "name": "prodmesh-paging",
+  "version": "0.1.0",
+  "description": "Nursery visual paging for church video systems: a volunteer page, a keyable output page, and a tech admin page.",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "selftest": "node server/index.js --selftest"
+  }
+}

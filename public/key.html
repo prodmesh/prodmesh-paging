@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paging Key</title>
+<link rel="stylesheet" href="/static/key.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+</style>
+</head>
+<body>
+<!--
+  The key output. Pure black, white text, nothing else ever: the ATEM lumas
+  this, so any grey pixel (a cursor, a scrollbar, a spinner) shows up on the
+  projectors. When the link to the server is lost the frame goes black rather
+  than freezing on a code that may already have been cleared.
+
+  ?test=2X3Y shows a fixed code, for setting up the key on the ATEM.
+-->
+<div id="frame" class="key-frame"></div>
+<script type="module">
+  import { connect } from '/static/lib.js';
+  import { renderKey } from '/static/key-render.js';
+
+  const frame = document.getElementById('frame');
+  const test = new URLSearchParams(location.search).get('test');
+
+  let pages = [];
+  let config = null;
+  let online = false;
+  let index = 0;
+  let rotateTimer = null;
+
+  function current() {
+    if (test) return test.toUpperCase().slice(0, 8);
+    if (!online || !pages.length) return null;
+    return pages[index % pages.length].code;
+  }
+
+  function draw() {
+    renderKey(frame, current(), config?.display);
+  }
+
+  function schedule() {
+    clearInterval(rotateTimer);
+    if (pages.length > 1 && config) {
+      rotateTimer = setInterval(() => {
+        index = (index + 1) % pages.length;
+        draw();
+      }, config.rotateSeconds * 1000);
+    }
+  }
+
+  connect(['paging:active', 'paging:display'], {
+    onTopic(topic, data) {
+      if (topic === 'paging:active') {
+        // Keep showing the same code if it's still active, so a new page
+        // doesn't cut the one on screen short.
+        const showing = pages[index % pages.length]?.code;
+        pages = data.pages;
+        const keep = pages.findIndex((p) => p.code === showing);
+        index = keep >= 0 ? keep : 0;
+      } else {
+        config = data;
+      }
+      schedule();
+      draw();
+    },
+    onStatus(up) {
+      online = up;
+      draw();
+    },
+  });
+</script>
+</body>
+</html>

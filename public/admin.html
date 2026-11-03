@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paging Admin</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/key.css">
+</head>
+<body>
+<div id="offline" class="banner" hidden>Not connected to the paging server.</div>
+
+<main class="wide">
+  <!-- First run -->
+  <section id="setup" hidden>
+    <h1>Set up paging</h1>
+    <p class="sub">Choose two PINs (4–8 digits). The nursery PIN is for volunteers. The admin PIN is for tech only.</p>
+    <form id="setup-form" class="panel">
+      <div class="row">
+        <div><label for="setup-nursery">Nursery PIN</label><input id="setup-nursery" inputmode="numeric" required></div>
+        <div><label for="setup-admin">Admin PIN</label><input id="setup-admin" inputmode="numeric" required></div>
+      </div>
+      <button type="submit" style="margin-top:16px">Save PINs</button>
+      <p id="setup-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- Login -->
+  <section id="login" hidden>
+    <h1>Paging Admin</h1>
+    <form id="login-form" class="panel">
+      <label for="admin-pin">Admin PIN</label>
+      <input id="admin-pin" type="password" inputmode="numeric" autocomplete="off" required>
+      <button type="submit" style="margin-top:16px">Log in</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- Admin -->
+  <section id="admin" hidden>
+    <div class="topbar">
+      <div>
+        <h1>Paging Admin</h1>
+        <p class="sub">Nursery: <code id="url-nursery"></code> · Key output: <code id="url-key"></code></p>
+      </div>
+      <button id="logout" class="secondary" type="button">Log out</button>
+    </div>
+
+    <div class="panel">
+      <div class="topbar">
+        <h2>On screen now</h2>
+        <button id="clear-all" class="danger" type="button">Clear all</button>
+      </div>
+      <p id="active" class="note"></p>
+    </div>
+
+    <form id="config-form" class="panel">
+      <h2>Settings</h2>
+      <div class="row">
+        <div><label for="autoClearMinutes">Auto-clear after (minutes)</label><input id="autoClearMinutes" type="number" min="1" max="120" step="1"></div>
+        <div><label for="rotateSeconds">Seconds per code when several are up</label><input id="rotateSeconds" type="number" min="1" max="30" step="0.5"></div>
+      </div>
+
+      <h2 style="margin-top:20px">Key look</h2>
+      <div class="row">
+        <div>
+          <label for="position">Position</label>
+          <select id="position">
+            <option value="top-right">Top right</option>
+            <option value="top-left">Top left</option>
+            <option value="bottom-right">Bottom right</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="center">Center</option>
+          </select>
+        </div>
+        <div><label for="codeSizeVh">Code size (% of height)</label><input id="codeSizeVh" type="number" min="3" max="60" step="0.5"></div>
+        <div><label for="marginVh">Edge margin (% of height)</label><input id="marginVh" type="number" min="0" max="20" step="0.5"></div>
+      </div>
+      <div class="row">
+        <div><label for="label">Label above the code</label><input id="label" maxlength="32"></div>
+        <div><label class="inline" style="margin-top:38px"><input id="showLabel" type="checkbox"> Show label</label></div>
+      </div>
+
+      <label>Preview (unsaved changes show here first)</label>
+      <div id="preview" class="key-frame preview"></div>
+      <p class="note">To set up the ATEM key without a real page, open <code id="url-test"></code> on the output machine.</p>
+
+      <button type="submit" style="margin-top:12px">Save settings</button>
+      <span id="config-flash" class="flash" style="margin-left:12px"></span>
+    </form>
+
+    <div class="panel">
+      <h2>PINs</h2>
+      <p class="note">Changing a PIN logs out every browser that used the old one.</p>
+      <div class="row">
+        <div><label for="new-nursery">New nursery PIN</label><input id="new-nursery" inputmode="numeric"></div>
+        <div><button id="save-nursery" type="button" class="secondary">Change nursery PIN</button></div>
+      </div>
+      <div class="row">
+        <div><label for="new-admin">New admin PIN</label><input id="new-admin" inputmode="numeric"></div>
+        <div><button id="save-admin" type="button" class="secondary">Change admin PIN</button></div>
+      </div>
+      <p id="pin-msg" class="error"></p>
+    </div>
+
+    <div class="panel">
+      <div class="topbar">
+        <h2>Log</h2>
+        <button id="refresh-log" class="secondary" type="button">Refresh</button>
+      </div>
+      <div class="log-wrap">
+        <table class="log">
+          <thead><tr><th>Time</th><th>Action</th><th>Code</th><th>Station</th><th>Address</th></tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { api, connect, loadToken, saveToken } from '/static/lib.js';
+  import { renderKey } from '/static/key-render.js';
+
+  const TOKEN_KEY = 'paging.adminToken';
+  const $ = (id) => document.getElementById(id);
+  let token = loadToken(TOKEN_KEY);
+  let dirty = false; // don't let a live config push overwrite half-typed edits
+
+  for (const [id, path] of [['url-nursery', '/'], ['url-key', '/key'], ['url-test', '/key?test=2X3Y']]) {
+    $(id).textContent = location.origin + path;
+  }
+
+  function show(which) {
+    for (const s of ['setup', 'login', 'admin']) $(s).hidden = s !== which;
+    if (which === 'admin') loadLog();
+  }
+
+  function loggedOut() {
+    token = null;
+    saveToken(TOKEN_KEY, null);
+    show('login');
+  }
+
+  // ── Setup / login ──
+
+  $('setup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await api('POST', '/api/setup', {
+      body: { nurseryPin: $('setup-nursery').value, adminPin: $('setup-admin').value },
+    });
+    if (!r.ok) return ($('setup-error').textContent = r.data.error ?? 'Could not save.');
+    token = r.data.token;
+    saveToken(TOKEN_KEY, token);
+    show('admin');
+  });
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await api('POST', '/api/session', { body: { role: 'admin', pin: $('admin-pin').value } });
+    if (!r.ok) return ($('login-error').textContent = r.data.error ?? 'Could not log in.');
+    token = r.data.token;
+    saveToken(TOKEN_KEY, token);
+    $('admin-pin').value = '';
+    $('login-error').textContent = '';
+    show('admin');
+  });
+
+  $('logout').addEventListener('click', async () => {
+    await api('DELETE', '/api/session', { token });
+    loggedOut();
+  });
+
+  // ── Settings ──
+
+  function formConfig() {
+    return {
+      autoClearMinutes: Number($('autoClearMinutes').value),
+      rotateSeconds: Number($('rotateSeconds').value),
+      display: {
+        position: $('position').value,
+        codeSizeVh: Number($('codeSizeVh').value),
+        marginVh: Number($('marginVh').value),
+        label: $('label').value,
+        showLabel: $('showLabel').checked,
+      },
+    };
+  }
+
+  function fillForm(c) {
+    $('autoClearMinutes').value = c.autoClearMinutes;
+    $('rotateSeconds').value = c.rotateSeconds;
+    $('position').value = c.display.position;
+    $('codeSizeVh').value = c.display.codeSizeVh;
+    $('marginVh').value = c.display.marginVh;
+    $('label').value = c.display.label;
+    $('showLabel').checked = c.display.showLabel;
+    drawPreview();
+  }
+
+  const drawPreview = () => renderKey($('preview'), '2X3Y', formConfig().display);
+
+  $('config-form').addEventListener('input', () => {
+    dirty = true;
+    $('config-flash').textContent = '';
+    drawPreview();
+  });
+
+  $('config-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await api('PUT', '/api/config', { body: formConfig(), token });
+    if (r.status === 401) return loggedOut();
+    dirty = false;
+    fillForm(r.data); // shows any value the server clamped
+    $('config-flash').textContent = 'Saved.';
+    loadLog();
+  });
+
+  // ── Active pages ──
+
+  $('clear-all').addEventListener('click', async () => {
+    if (!confirm('Take every page off the screens?')) return;
+    const r = await api('DELETE', '/api/pages', { token });
+    if (r.status === 401) return loggedOut();
+    loadLog();
+  });
+
+  // ── PINs ──
+
+  for (const role of ['nursery', 'admin']) {
+    $(`save-${role}`).addEventListener('click', async () => {
+      const r = await api('PUT', `/api/pins/${role}`, { body: { pin: $(`new-${role}`).value }, token });
+      if (r.status === 401) return loggedOut();
+      $('pin-msg').textContent = r.ok ? '' : r.data.error;
+      if (!r.ok) return;
+      $(`new-${role}`).value = '';
+      if (role === 'admin') return loggedOut(); // our own session was just revoked
+      alert('Nursery PIN changed. Nursery computers will need the new PIN.');
+      loadLog();
+    });
+  }
+
+  // ── Log ──
+
+  async function loadLog() {
+    const r = await api('GET', '/api/log?limit=200', { token });
+    if (r.status === 401) return loggedOut();
+    const body = $('log');
+    body.replaceChildren();
+    for (const e of r.data.entries ?? []) {
+      const tr = document.createElement('tr');
+      const when = new Date(e.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      for (const v of [when, e.action, e.code ?? e.role ?? '', e.station ?? '', e.ip ?? '']) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.append(td);
+      }
+      body.append(tr);
+    }
+  }
+  $('refresh-log').addEventListener('click', loadLog);
+
+  // ── Live ──
+
+  connect(['paging:active', 'paging:display'], {
+    onTopic(topic, data) {
+      if (topic === 'paging:active') {
+        $('active').textContent = data.pages.length
+          ? data.pages.map((p) => `${p.code} (${p.station})`).join(' · ')
+          : 'Nothing is on screen.';
+        if (!$('admin').hidden) loadLog();
+      } else if (!dirty) {
+        fillForm(data);
+      }
+    },
+    onStatus(up) {
+      $('offline').hidden = up;
+    },
+  });
+
+  // ── Start ──
+
+  const s = await api('GET', '/api/session', { token });
+  if (s.data.needsSetup) show('setup');
+  else if (s.data.role === 'admin') show('admin');
+  else loggedOut();
+</script>
+</body>
+</html>
