@@ -57,7 +57,6 @@
     <form id="config-form" class="panel">
       <h2>Settings</h2>
       <div class="row">
-        <div><label for="codeLength">Code length (characters)</label><input id="codeLength" type="number" min="2" max="6" step="1"></div>
         <div><label for="autoClearMinutes">Auto-clear after (minutes)</label><input id="autoClearMinutes" type="number" min="1" max="120" step="1"></div>
         <div><label for="rotateSeconds">Seconds per code when several are up</label><input id="rotateSeconds" type="number" min="1" max="30" step="0.5"></div>
       </div>
@@ -178,7 +177,6 @@
 
   function formConfig() {
     return {
-      codeLength: Number($('codeLength').value),
       autoClearMinutes: Number($('autoClearMinutes').value),
       rotateSeconds: Number($('rotateSeconds').value),
       display: {
@@ -192,7 +190,6 @@
   }
 
   function fillForm(c) {
-    $('codeLength').value = c.codeLength;
     $('autoClearMinutes').value = c.autoClearMinutes;
     $('rotateSeconds').value = c.rotateSeconds;
     $('position').value = c.display.position;
@@ -203,13 +200,9 @@
     drawPreview();
   }
 
-  // Sample code at the configured length, so size and margins are judged on
-  // the widest thing that will actually go out.
-  const SAMPLE = '2X3YK7';
-  const drawPreview = () => {
-    const c = formConfig();
-    renderKey($('preview'), SAMPLE.slice(0, Math.min(6, Math.max(2, c.codeLength || 4))), c.display);
-  };
+  // A full-length sample, so size and margins are judged on the widest code
+  // that can go out (codes are up to 5 characters).
+  const drawPreview = () => renderKey($('preview'), 'W0M8O', formConfig().display);
 
   $('config-form').addEventListener('input', () => {
     dirty = true;

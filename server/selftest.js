@@ -52,11 +52,11 @@ export async function selftest() {
     check('nursery login', r.status === 200 && nursery, r);
 
     // ── Paging ──
-    r = await call('POST', '/api/pages', { body: { code: '2O3Y' }, token: nursery });
-    check('ambiguous characters refused', r.status === 400 && /never use/.test(r.data.error), r);
+    r = await call('POST', '/api/pages', { body: { code: '   ' }, token: nursery });
+    check('empty code refused', r.status === 400, r);
 
-    r = await call('POST', '/api/pages', { body: { code: '2x3' }, token: nursery });
-    check('short code refused', r.status === 400, r);
+    r = await call('POST', '/api/pages', { body: { code: 'ab12cd' }, token: nursery });
+    check('6-character code refused', r.status === 400 && /at most 5/.test(r.data.error), r);
 
     r = await call('POST', '/api/pages', { body: { code: ' 2x3y ' }, token: nursery });
     check('page normalizes code', r.status === 200 && r.data.page.code === '2X3Y' && !r.data.renewed, r);
@@ -90,6 +90,17 @@ export async function selftest() {
     r = await call('DELETE', '/api/pages/ab7k', { token: nursery });
     check('manual clear', r.data.cleared === true && app.paging.list().length === 1, r);
 
+    // No character rules: O and 0, I and 1, punctuation, 1 to 5 characters.
+    for (const [raw, want] of [['o0i1', 'O0I1'], ['7', '7'], ['a-b#c', 'A-B#C']]) {
+      r = await call('POST', '/api/pages', { body: { code: raw }, token: nursery });
+      check(`code ${JSON.stringify(raw)} accepted`, r.status === 200 && r.data.page.code === want, r);
+    }
+    r = await call('DELETE', `/api/pages/${encodeURIComponent('a-b#c')}`, { token: nursery });
+    check('clear works for punctuation codes', r.data.cleared === true, r);
+    await call('DELETE', '/api/pages/o0i1', { token: nursery });
+    await call('DELETE', '/api/pages/7', { token: nursery });
+    check('clears leave only the original page', app.paging.list().length === 1, app.paging.list());
+
     clock += 10 * 60_000 + 1;
     app.paging.sweep();
     check('auto-clear after timeout', app.paging.list().length === 0, app.paging.list());
@@ -104,21 +115,10 @@ export async function selftest() {
     });
     check('config clamps bad values', r.data.autoClearMinutes === 1 && r.data.display.codeSizeVh === 60 && r.data.display.position === 'top-right', r.data);
     check('config keeps good values', r.data.rotateSeconds === 6, r.data);
-    check('code length defaults to 4', r.data.codeLength === 4, r.data);
+    check('config reports max code length', r.data.maxCodeLength === 5, r.data);
 
-    r = await call('PUT', '/api/config', { body: { codeLength: 9, display: { position: 'top-both' } }, token: admin });
-    check('code length clamps to 6', r.data.codeLength === 6, r.data);
+    r = await call('PUT', '/api/config', { body: { display: { position: 'top-both' } }, token: admin });
     check('mirrored position accepted', r.data.display.position === 'top-both', r.data);
-
-    r = await call('PUT', '/api/config', { body: { codeLength: 6 }, token: admin });
-    r = await call('POST', '/api/pages', { body: { code: '2X3Y' }, token: nursery });
-    check('wrong-length code refused', r.status === 400 && /6 characters/.test(r.data.error), r);
-    r = await call('POST', '/api/pages', { body: { code: '2x3yk7' }, token: nursery });
-    check('configured-length code accepted', r.status === 200 && r.data.page.code === '2X3YK7', r);
-
-    r = await call('PUT', '/api/config', { body: { codeLength: 2 }, token: admin });
-    r = await call('POST', '/api/pages', { body: { code: 'K7' }, token: nursery });
-    check('2-character code accepted', r.status === 200 && r.data.page.code === 'K7', r);
 
     r = await call('GET', '/api/log', { token: admin });
     const actions = r.data.entries.map((e) => e.action);

@@ -39,8 +39,8 @@ HDMI, see [docs/raspberry-pi.md](docs/raspberry-pi.md).
 
 ## Behaviour
 
-- Codes are 2–6 characters (4 by default; tech sets this at `/admin`) using
-  `A–Z` and `2–9`, but never O, 0, I or 1.
+- Codes are 1–5 characters, with no rules about which characters (O and 0
+  are both allowed). They're upper-cased and spaces are removed.
 - The key can sit in any corner, the center, or **both top corners (or both
   bottom corners) at once**. With both, each screen masks the side it wants
   off a single key output.

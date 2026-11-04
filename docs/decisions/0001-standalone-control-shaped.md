@@ -52,8 +52,9 @@ trigger a 30-second lockout. Every page, renew, clear and timeout is logged
 with the time, the station name and the client address, so mistakes can be
 traced without adding any friction for volunteers.
 
-**Codes are four characters by default (see below) from `A–Z 2–9` without O, 0, I or 1**,
-because those pairs can't be told apart on a projector from the back row.
+**Codes:** originally four characters from `A–Z 2–9` without O, 0, I or 1,
+so they couldn't be misread from the back row. Superseded; see the second
+addendum.
 
 **State is plain files** in `var/`: config, active pages, sessions, and a
 JSON-lines log. Writes go to a temp file and are renamed into place. Active
@@ -74,8 +75,6 @@ cleared.
 - PIN security matches the closed-LAN threat model the family assumes. It
   stops a curious congregant on guest Wi-Fi; it is not meant to stop a
   determined attacker on the production network.
-- Codes printed with O/0/I/1 can't be paged. If the check-in system can print
-  those characters, this needs revisiting.
 
 ## Not decided here
 
@@ -86,7 +85,8 @@ cleared.
 
 ## Addendum — configurable length and mirrored corners (2026-11-03)
 
-- **Code length is a setting from 2 to 6, defaulting to 4.** Paging has to
+- ~~**Code length is a setting from 2 to 6, defaulting to 4.**~~ Replaced by
+  the second addendum. Paging has to
   accept whatever the check-in labels print, so tech sets the length to match.
   The nursery page reads it from `paging:display` and resizes the input. Pages
   already on screen are unaffected when the length changes.
@@ -94,3 +94,16 @@ cleared.
   corners of the key output. Different screens fed from the one keyed feed can
   each mask to the side that suits them, so there's no need for a second
   output or keyer.
+
+## Addendum — no character rules on codes (2026-11-03)
+
+Nursery volunteers asked to type whatever the sticker says. The excluded
+characters (O/0/I/1) and the fixed length kept getting in their way. Codes are
+now **any 1 to 5 characters**: upper-cased, with spaces removed, and no other
+rules. The admin code-length setting is gone.
+
+The cost is the reason the rule existed: O and 0 can look alike on screen.
+Parents read their own sticker against the screen, so a lookalike is
+unlikely to send the wrong parent, and the volunteers preferred fewer refusals.
+The clear endpoint now URL-decodes its path segment, since a code may contain
+characters such as `#` or `/`.

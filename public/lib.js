@@ -1,9 +1,5 @@
 // Shared browser helpers: API calls, the saved login, and the live stream.
 
-// Mirrors server/paging.js. Duplicated rather than fetched so the nursery page
-// can filter keystrokes before the first network round trip.
-export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
 // localStorage can throw (private windows, blocked storage); a missing token
 // just means "log in again", never a broken page.
 export function loadToken(key) {

@@ -3,13 +3,10 @@
 
 import crypto from 'node:crypto';
 
-// Codes are four characters from an alphabet without O/0 and I/1. A parent
-// squinting at a projector from row 30 cannot tell those apart, and neither
-// can a volunteer reading a smudged sticker.
-export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-// Length is set by tech to match whatever the check-in labels print.
-export const MIN_CODE_LENGTH = 2;
-export const MAX_CODE_LENGTH = 6;
+// Codes are whatever the check-in sticker says, 1 to 5 characters. The
+// nursery asked for no character rules (O and 0 both allowed), so the only
+// normalization is upper-casing and dropping spaces.
+export const MAX_CODE_LENGTH = 5;
 
 export const POSITIONS = [
   'top-right', 'top-left', 'top-both',
@@ -18,7 +15,6 @@ export const POSITIONS = [
 ];
 
 export const DEFAULT_CONFIG = {
-  codeLength: 4,
   autoClearMinutes: 10,
   rotateSeconds: 4,
   display: {
@@ -33,18 +29,12 @@ export const DEFAULT_CONFIG = {
   pins: { nursery: null, admin: null },
 };
 
-export function normalizeCode(raw, length) {
-  const code = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
-  if (code.length !== length) {
-    return { error: `Codes are ${length} characters.` };
-  }
-  const bad = [...code].filter((c) => !CODE_ALPHABET.includes(c));
-  if (bad.length) {
-    if (bad.some((c) => 'O0I1'.includes(c))) {
-      return { error: 'Codes never use O, 0, I or 1. Check the label again.' };
-    }
-    return { error: 'Codes use only letters and numbers.' };
-  }
+export function normalizeCode(raw) {
+  const code = String(raw ?? '').toUpperCase().replace(/\s+/g, '');
+  // Count characters, not UTF-16 units, so an accented letter is one.
+  const length = [...code].length;
+  if (length < 1) return { error: 'Type a code first.' };
+  if (length > MAX_CODE_LENGTH) return { error: `Codes are at most ${MAX_CODE_LENGTH} characters.` };
   return { code };
 }
 
@@ -62,7 +52,6 @@ export function sanitizeConfig(input, base) {
   const bd = base.display;
   return {
     ...base,
-    codeLength: Math.round(clamp(input?.codeLength, MIN_CODE_LENGTH, MAX_CODE_LENGTH, base.codeLength)),
     autoClearMinutes: Math.round(clamp(input?.autoClearMinutes, 1, 120, base.autoClearMinutes)),
     rotateSeconds: clamp(input?.rotateSeconds, 1, 30, base.rotateSeconds),
     display: {
@@ -125,7 +114,7 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   }
 
   function page(raw, who) {
-    const { code, error } = normalizeCode(raw, config.codeLength);
+    const { code, error } = normalizeCode(raw);
     if (error) return { error };
     const t = now();
     const expiresAt = t + config.autoClearMinutes * 60_000;
@@ -146,7 +135,8 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   }
 
   function clear(raw, who, reason = 'clear') {
-    const code = String(raw ?? '').toUpperCase();
+    const code = normalizeCode(raw).code;
+    if (!code) return false;
     const before = pages.length;
     pages = pages.filter((p) => p.code !== code);
     if (pages.length === before) return false;
@@ -177,7 +167,7 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   // ── Config ──
 
   const publicConfig = () => ({
-    codeLength: config.codeLength,
+    maxCodeLength: MAX_CODE_LENGTH,
     autoClearMinutes: config.autoClearMinutes,
     rotateSeconds: config.rotateSeconds,
     display: config.display,

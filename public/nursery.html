@@ -29,13 +29,13 @@
     <div class="topbar">
       <div>
         <h1>Page a parent</h1>
-        <p class="sub">Type the <span id="code-len">4</span>-character code from the child's sticker and press PAGE.</p>
+        <p class="sub">Type the code from the child's sticker and press PAGE.</p>
       </div>
       <button id="logout" class="secondary" type="button">Log out</button>
     </div>
 
     <form id="page-form" class="panel" autocomplete="off">
-      <input id="code" class="code-input" maxlength="4" autocapitalize="characters" spellcheck="false" placeholder="····" aria-label="Paging code">
+      <input id="code" class="code-input" autocapitalize="characters" spellcheck="false" placeholder="·····" aria-label="Paging code">
       <button id="page-btn" class="page-btn" type="submit">PAGE</button>
       <p id="page-error" class="error"></p>
       <p id="page-flash" class="flash"></p>
@@ -50,7 +50,7 @@
 </main>
 
 <script type="module">
-  import { api, connect, loadToken, saveToken, CODE_ALPHABET, minutesAgo, minutesLeft } from '/static/lib.js';
+  import { api, connect, loadToken, saveToken, minutesAgo, minutesLeft } from '/static/lib.js';
 
   const TOKEN_KEY = 'paging.nurseryToken';
   const $ = (id) => document.getElementById(id);
@@ -60,18 +60,6 @@
   let skew = 0; // server clock minus ours, so "clears in" is right on a drifting PC
   let online = false;
   let config = null;
-  const codeLength = () => config?.codeLength ?? 4;
-
-  // The code box follows the configured length: maxlength, placeholder dots
-  // and the instruction text all change when tech changes it.
-  function applyCodeLength() {
-    const n = codeLength();
-    $('code').maxLength = n;
-    $('code').placeholder = '·'.repeat(n);
-    $('code-len').textContent = n;
-    if ($('code').value.length > n) $('code').value = $('code').value.slice(0, n);
-  }
-
   function show(which) {
     $('login').hidden = which !== 'login';
     $('paging').hidden = which !== 'paging';
@@ -109,24 +97,22 @@
   });
 
   // ── Code entry ──
-  // Filter as they type: upper-case, drop spaces, and say immediately when a
-  // character can't be in a code instead of waiting for the server to refuse.
+  // No character rules: the code is whatever the sticker says. Upper-case it
+  // and drop spaces as they type so what they see is what goes on screen.
 
   $('code').addEventListener('input', () => {
-    const raw = $('code').value.toUpperCase().replace(/\s+/g, '');
-    const bad = [...raw].find((c) => !CODE_ALPHABET.includes(c));
-    $('code').value = [...raw].filter((c) => CODE_ALPHABET.includes(c)).join('').slice(0, codeLength());
-    $('page-error').textContent = bad
-      ? ('O0I1'.includes(bad) ? `Codes never use ${bad}. Check the sticker again.` : `"${bad}" can't be in a code.`)
-      : '';
+    // Spaces are removed before the 5-character cut, so a stray space never
+    // costs a real character. (No maxlength attribute: it would count spaces.)
+    $('code').value = [...$('code').value.toUpperCase().replace(/\s+/g, '')].slice(0, 5).join('');
+    $('page-error').textContent = '';
     $('page-flash').textContent = '';
   });
 
   $('page-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const code = $('code').value;
-    if (code.length !== codeLength()) {
-      $('page-error').textContent = `Codes are ${codeLength()} characters.`;
+    if (!code) {
+      $('page-error').textContent = 'Type a code first.';
       return;
     }
     $('page-btn').disabled = true;
@@ -204,7 +190,6 @@
         skew = data.serverNow - Date.now();
       } else {
         config = data;
-        applyCodeLength();
       }
       renderActive();
     },

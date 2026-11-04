@@ -229,11 +229,18 @@ export function createApp({ dataDir, now = Date.now }) {
       return json(res, 200, r);
     }
 
-    const clearMatch = p.match(/^\/api\/pages\/([A-Za-z0-9]{1,8})$/);
+    // Codes can hold any character, so the path segment is URL-encoded.
+    const clearMatch = p.match(/^\/api\/pages\/([^/]{1,64})$/);
     if (m === 'DELETE' && clearMatch) {
       const who = auth(req, 'nursery');
       if (!who) return json(res, 401, { error: 'Log in first.' });
-      return json(res, 200, { cleared: paging.clear(clearMatch[1], who) });
+      let raw;
+      try {
+        raw = decodeURIComponent(clearMatch[1]);
+      } catch {
+        return json(res, 400, { error: 'Bad code.' });
+      }
+      return json(res, 200, { cleared: paging.clear(raw, who) });
     }
 
     // ── Admin actions ──
