@@ -2,6 +2,7 @@
 // requests onto these calls, and the selftest drives them with a fake clock.
 
 import crypto from 'node:crypto';
+import { BLOCKED_WORDS } from './blocked-words.js';
 
 // Codes are whatever the check-in sticker says, 1 to 5 characters. The
 // nursery asked for no character rules (O and 0 both allowed), so the only
@@ -14,6 +15,8 @@ export const POSITIONS = [
   'center',
 ];
 
+export const CORNERS = ['top-right', 'top-left', 'bottom-right', 'bottom-left'];
+
 export const DEFAULT_CONFIG = {
   autoClearMinutes: 10,
   rotateSeconds: 4,
@@ -25,8 +28,22 @@ export const DEFAULT_CONFIG = {
     marginVh: 4,
     label: 'CHILD PAGE',
     showLabel: true,
+    // A small white square that flips on every message from the server. It
+    // sits outside the keyer's mask, so only the multiview sees it: blinking
+    // means the key page is alive and connected.
+    heartbeat: {
+      enabled: false,
+      position: 'bottom-right',
+      sizeVh: 1.5,
+      marginVh: 2,
+    },
   },
+  // Tech's additions to BLOCKED_WORDS, edited at /admin.
+  blockedWords: [],
   pins: { nursery: null, admin: null },
+  // Hash of the key Bitfocus Companion (or any HTTP client) sends to clear
+  // all pages. Null until tech generates one at /admin.
+  integrationKey: null,
 };
 
 export function normalizeCode(raw) {
@@ -36,6 +53,23 @@ export function normalizeCode(raw) {
   if (length < 1) return { error: 'Type a code first.' };
   if (length > MAX_CODE_LENGTH) return { error: `Codes are at most ${MAX_CODE_LENGTH} characters.` };
   return { code };
+}
+
+// ── Blocked words ────────────────────────────────────────────────────────────
+
+export function normalizeWord(w) {
+  return String(w ?? '').toUpperCase().replace(/\s+/g, '');
+}
+
+// Short words must match the whole code; longer ones match anywhere. See
+// blocked-words.js for why.
+export function isBlocked(code, extra = []) {
+  for (const raw of [...BLOCKED_WORDS, ...extra]) {
+    const w = normalizeWord(raw);
+    if (!w) continue;
+    if (w.length <= 3 ? code === w : code.includes(w)) return true;
+  }
+  return false;
 }
 
 // ── Config validation ────────────────────────────────────────────────────────
@@ -60,7 +94,17 @@ export function sanitizeConfig(input, base) {
       marginVh: clamp(d.marginVh, 0, 20, bd.marginVh),
       label: typeof d.label === 'string' ? d.label.slice(0, 32) : bd.label,
       showLabel: typeof d.showLabel === 'boolean' ? d.showLabel : bd.showLabel,
+      heartbeat: sanitizeHeartbeat(d.heartbeat, bd.heartbeat ?? DEFAULT_CONFIG.display.heartbeat),
     },
+  };
+}
+
+function sanitizeHeartbeat(h, base) {
+  return {
+    enabled: typeof h?.enabled === 'boolean' ? h.enabled : base.enabled,
+    position: CORNERS.includes(h?.position) ? h.position : base.position,
+    sizeVh: clamp(h?.sizeVh, 0.5, 10, base.sizeVh),
+    marginVh: clamp(h?.marginVh, 0, 20, base.marginVh),
   };
 }
 
@@ -89,9 +133,13 @@ const tokenKey = (token) => crypto.createHash('sha256').update(String(token)).di
 
 export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   const stored = store.read('config.json', {});
+  // sanitizeConfig only knows the public settings; the private ones are
+  // carried over from the file explicitly.
   let config = {
     ...sanitizeConfig(stored, DEFAULT_CONFIG),
     pins: { ...DEFAULT_CONFIG.pins, ...stored.pins },
+    blockedWords: Array.isArray(stored.blockedWords) ? stored.blockedWords : [],
+    integrationKey: stored.integrationKey ?? null,
   };
   let pages = store.read('state.json', { pages: [] }).pages ?? [];
   // Sessions are stored by token hash, so a copied data folder can't be used
@@ -116,6 +164,10 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   function page(raw, who) {
     const { code, error } = normalizeCode(raw);
     if (error) return { error };
+    if (isBlocked(code, config.blockedWords)) {
+      log('blocked', { code, ...who });
+      return { error: "That code can't be shown. If it's really on the sticker, call tech." };
+    }
     const t = now();
     const expiresAt = t + config.autoClearMinutes * 60_000;
     const existing = pages.find((p) => p.code === code);
@@ -174,11 +226,42 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
   });
 
   function updateConfig(input, who) {
-    config = { ...sanitizeConfig(input, config), pins: config.pins };
+    config = { ...config, ...sanitizeConfig(input, config) };
     log('config', { ...who, config: publicConfig() });
     saveConfig();
     return publicConfig();
   }
+
+  // ── Blocked words (admin) ──
+
+  const blockedWords = () => ({ builtIn: BLOCKED_WORDS.length, extra: config.blockedWords });
+
+  function setBlockedWords(list, who) {
+    if (!Array.isArray(list)) return { error: 'Expected a list of words.' };
+    config.blockedWords = [...new Set(list.map(normalizeWord).filter(Boolean))].slice(0, 500);
+    log('blocked-words', { ...who, count: config.blockedWords.length });
+    saveConfig();
+    return blockedWords();
+  }
+
+  // ── Integration key (Companion) ──
+  // One shared secret, shown once when generated and stored only as a hash.
+  // It can clear all pages and nothing else.
+
+  function newIntegrationKey(who) {
+    const key = crypto.randomBytes(18).toString('base64url');
+    config.integrationKey = tokenKey(key);
+    log('integration-key', { ...who });
+    saveConfig();
+    return key;
+  }
+
+  function checkIntegrationKey(key) {
+    if (!key || !config.integrationKey) return false;
+    return crypto.timingSafeEqual(Buffer.from(tokenKey(key), 'hex'), Buffer.from(config.integrationKey, 'hex'));
+  }
+
+  const hasIntegrationKey = () => Boolean(config.integrationKey);
 
   // ── Auth ──
 
@@ -232,6 +315,11 @@ export function createPaging({ store, now = Date.now, onChange = () => {} }) {
     needsSetup,
     hasPin,
     setPin,
+    blockedWords,
+    setBlockedWords,
+    newIntegrationKey,
+    checkIntegrationKey,
+    hasIntegrationKey,
     login,
     session,
     logout,

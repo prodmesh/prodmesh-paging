@@ -31,6 +31,7 @@
   let online = false;
   let index = 0;
   let rotateTimer = null;
+  let beat = false;
 
   function current() {
     if (test) return test.toUpperCase().slice(0, 8);
@@ -39,7 +40,9 @@
   }
 
   function draw() {
-    renderKey(frame, current(), config?.display);
+    // Offline draws nothing at all, heartbeat included: a frozen square on
+    // the multiview would look like a healthy one.
+    renderKey(frame, current(), config?.display, online && beat);
   }
 
   function schedule() {
@@ -69,6 +72,10 @@
     },
     onStatus(up) {
       online = up;
+      draw();
+    },
+    onBeat() {
+      beat = !beat;
       draw();
     },
   });

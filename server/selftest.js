@@ -120,12 +120,60 @@ export async function selftest() {
     r = await call('PUT', '/api/config', { body: { display: { position: 'top-both' } }, token: admin });
     check('mirrored position accepted', r.data.display.position === 'top-both', r.data);
 
+    // ── Heartbeat ──
+    check('heartbeat off by default', r.data.display.heartbeat?.enabled === false, r.data.display);
+    r = await call('PUT', '/api/config', {
+      body: { display: { heartbeat: { enabled: true, position: 'middle', sizeVh: 99 } } },
+      token: admin,
+    });
+    const hb = r.data.display.heartbeat;
+    check('heartbeat settings clamp', hb.enabled === true && hb.position === 'bottom-right' && hb.sizeVh === 10, hb);
+    check('heartbeat leaves code position alone', r.data.display.position === 'top-both', r.data.display);
+
+    // ── Blocked words ──
+    r = await call('POST', '/api/pages', { body: { code: 'xfuck' }, token: nursery });
+    check('built-in word blocked anywhere in code', r.status === 400 && /can't be shown/.test(r.data.error), r);
+    r = await call('POST', '/api/pages', { body: { code: 'ass' }, token: nursery });
+    check('short word blocked as whole code', r.status === 400, r);
+    r = await call('POST', '/api/pages', { body: { code: 'pass1' }, token: nursery });
+    check('short word not blocked inside a code', r.status === 200, r);
+    r = await call('PUT', '/api/blocked-words', { body: { words: ['zz9', ' zz9 ', '', 'bad words'] }, token: nursery });
+    check('nursery cannot edit blocked words', r.status === 401, r);
+    r = await call('PUT', '/api/blocked-words', { body: { words: ['zz9', ' zz9 ', '', 'bad words'] }, token: admin });
+    check('blocked words normalized and deduped', r.data.extra.join() === 'ZZ9,BADWORDS' && r.data.builtIn > 0, r.data);
+    r = await call('POST', '/api/pages', { body: { code: 'Zz9' }, token: nursery });
+    check('tech-added word blocked', r.status === 400, r);
+
+    // ── Companion clear-all ──
+    r = await call('POST', '/api/integrations/clear-all?key=anything');
+    check('clear-all refused before a key exists', r.status === 401, r);
+    r = await call('POST', '/api/integration-key', { token: nursery });
+    check('nursery cannot make an integration key', r.status === 401, r);
+    r = await call('POST', '/api/integration-key', { token: admin });
+    const ikey = r.data.key;
+    check('admin makes an integration key', r.status === 200 && typeof ikey === 'string' && ikey.length > 16, r);
+    r = await call('GET', '/api/session');
+    check('session reports key is set', r.data.integrationKeySet === true, r.data);
+    r = await call('POST', '/api/integrations/clear-all?key=wrong');
+    check('wrong integration key refused', r.status === 401, r);
+    r = await call('POST', `/api/integrations/clear-all?key=${encodeURIComponent(ikey)}`);
+    check('clear-all with key in query', r.status === 200 && r.data.cleared === 1 && app.paging.list().length === 0, r);
+    await call('POST', '/api/pages', { body: { code: 'K7' }, token: nursery });
+    let res2 = await fetch(`${base}/api/integrations/clear-all`, { method: 'POST', headers: { 'X-Paging-Key': ikey } });
+    check('clear-all with key in header', res2.status === 200 && (await res2.json()).cleared === 1, res2.status);
+    res2 = await fetch(`${base}/api/integrations/clear-all?key=${encodeURIComponent(ikey)}`);
+    check('clear-all refuses GET', res2.status === 404, res2.status);
+    r = await call('POST', '/api/integration-key', { token: admin });
+    res2 = await fetch(`${base}/api/integrations/clear-all?key=${encodeURIComponent(ikey)}`, { method: 'POST' });
+    check('new key revokes the old one', res2.status === 401, res2.status);
+
     r = await call('GET', '/api/log', { token: admin });
     const actions = r.data.entries.map((e) => e.action);
-    for (const a of ['page', 'renew', 'clear', 'timeout', 'config']) {
+    for (const a of ['page', 'renew', 'clear', 'timeout', 'config', 'blocked', 'integration-key']) {
       check(`log records ${a}`, actions.includes(a), actions);
     }
     check('log records station', r.data.entries.some((e) => e.station === 'Nursery A'), r.data.entries[0]);
+    check('log records Companion clears', r.data.entries.some((e) => e.action === 'clear' && e.station === 'Companion'), r.data.entries[0]);
 
     r = await call('PUT', '/api/pins/nursery', { body: { pin: '5555' }, token: admin });
     check('admin changes nursery PIN', r.status === 200, r);

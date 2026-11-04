@@ -23,6 +23,11 @@
   margin-bottom: 0.25em;
 }
 
+.key-heartbeat {
+  position: absolute;
+  background: #fff;
+}
+
 .key-code {
   font-weight: 800;
   letter-spacing: 0.06em;

@@ -26,14 +26,15 @@ const TYPES = {
 
 export const TOPICS = ['paging:active', 'paging:display'];
 
-// The key page blanks itself if it hears nothing for a few of these. Named
-// `ping` (not a `:` comment) so browser code can see it; Control's client only
-// listens for `msg`, so it ignores these harmlessly.
-const PING_MS = 5_000;
+// The key page blanks itself if it hears nothing for a few of these, and its
+// heartbeat indicator flips on each one. Named `ping` (not a `:` comment) so
+// browser code can see it; Control's client only listens for `msg`, so it
+// ignores these harmlessly.
+const PING_MS = 2_000;
 const SWEEP_MS = 1_000;
 
-// Failed logins per client address: five tries, then a 30 s pause. A 4-digit
-// PIN on an open LAN is only as good as this.
+// Failed logins (and wrong integration keys) per client address: five tries,
+// then a 30 s pause. A 4-digit PIN on an open LAN is only as good as this.
 const MAX_FAILS = 5;
 const LOCKOUT_MS = 30_000;
 
@@ -132,6 +133,13 @@ export function createApp({ dataDir, now = Date.now }) {
     });
   }
 
+  const lockedOut = (ip) => (fails.get(ip)?.until ?? 0) > now();
+  function failed(ip) {
+    const next = { count: (fails.get(ip)?.count ?? 0) + 1, until: 0 };
+    if (next.count >= MAX_FAILS) Object.assign(next, { count: 0, until: now() + LOCKOUT_MS });
+    fails.set(ip, next);
+  }
+
   const ipOf = (req) => req.socket.remoteAddress?.replace(/^::ffff:/, '') ?? '?';
   const tokenOf = (req) => (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '') || null;
 
@@ -177,28 +185,42 @@ export function createApp({ dataDir, now = Date.now }) {
         station: s?.station ?? null,
         needsSetup: paging.needsSetup(),
         nurseryPinSet: paging.hasPin('nursery'),
+        integrationKeySet: paging.hasIntegrationKey(),
       });
     }
 
     if (m === 'POST' && p === '/api/session') {
       const ip = ipOf(req);
-      const f = fails.get(ip);
-      if (f && f.until > now()) {
-        return json(res, 429, { error: 'Too many wrong PINs. Wait 30 seconds.' });
-      }
+      if (lockedOut(ip)) return json(res, 429, { error: 'Too many wrong PINs. Wait 30 seconds.' });
       const { role = 'nursery', pin, station } = await readBody(req);
       if (!paging.hasPin(role)) {
         return json(res, 409, { error: 'Tech has not set this PIN yet.' });
       }
       const token = paging.login(role, pin, station);
       if (!token) {
-        const next = { count: (f?.count ?? 0) + 1, until: 0 };
-        if (next.count >= MAX_FAILS) Object.assign(next, { count: 0, until: now() + LOCKOUT_MS });
-        fails.set(ip, next);
+        failed(ip);
         return json(res, 401, { error: 'Wrong PIN.' });
       }
       fails.delete(ip);
       return json(res, 200, { token, role });
+    }
+
+    // ── Integrations ──
+    // For a Bitfocus Companion "Generic HTTP" button, or anything that can
+    // send a request: POST with the key as ?key=…, an X-Paging-Key header or
+    // a Bearer token. POST only, so a link preview or browser prefetch can
+    // never clear the screens.
+
+    if (m === 'POST' && p === '/api/integrations/clear-all') {
+      const ip = ipOf(req);
+      if (lockedOut(ip)) return json(res, 429, { error: 'Too many wrong keys. Wait 30 seconds.' });
+      const key = url.searchParams.get('key') || req.headers['x-paging-key'] || tokenOf(req);
+      if (!paging.checkIntegrationKey(key)) {
+        failed(ip);
+        return json(res, 401, { error: 'Wrong or missing integration key.' });
+      }
+      fails.delete(ip);
+      return json(res, 200, { cleared: paging.clearAll({ station: 'Companion', ip }) });
     }
 
     if (m === 'DELETE' && p === '/api/session') {
@@ -249,6 +271,24 @@ export function createApp({ dataDir, now = Date.now }) {
       const who = auth(req, 'admin');
       if (!who) return json(res, 401, { error: 'Admin only.' });
       return json(res, 200, { cleared: paging.clearAll(who) });
+    }
+
+    if (m === 'GET' && p === '/api/blocked-words') {
+      if (!auth(req, 'admin')) return json(res, 401, { error: 'Admin only.' });
+      return json(res, 200, paging.blockedWords());
+    }
+
+    if (m === 'PUT' && p === '/api/blocked-words') {
+      const who = auth(req, 'admin');
+      if (!who) return json(res, 401, { error: 'Admin only.' });
+      const r = paging.setBlockedWords((await readBody(req)).words, who);
+      return json(res, r.error ? 400 : 200, r);
+    }
+
+    if (m === 'POST' && p === '/api/integration-key') {
+      const who = auth(req, 'admin');
+      if (!who) return json(res, 401, { error: 'Admin only.' });
+      return json(res, 200, { key: paging.newIntegrationKey(who) });
     }
 
     if (m === 'PUT' && p === '/api/config') {

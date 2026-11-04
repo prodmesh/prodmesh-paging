@@ -44,6 +44,13 @@ HDMI, see [docs/raspberry-pi.md](docs/raspberry-pi.md).
 - The key can sit in any corner, the center, or **both top corners (or both
   bottom corners) at once**. With both, each screen masks the side it wants
   off a single key output.
+- Common bad words can't be paged. The built-in list is in
+  [`server/blocked-words.js`](server/blocked-words.js); tech can add more at
+  `/admin` → Blocked codes. Words of 3 letters or fewer block only that exact
+  code, so a random sticker like `PASS1` still works.
+- An optional **heartbeat** square on the key output blinks every 2 seconds
+  while it's connected. Put it in a corner outside the keyer's mask, so it
+  shows on the multiview but never on the projectors.
 - Paging a code that is already showing restarts its timer instead of adding
   it twice.
 - Pages clear themselves after the auto-clear time (10 minutes by default),
@@ -55,6 +62,20 @@ HDMI, see [docs/raspberry-pi.md](docs/raspberry-pi.md).
   PAGE.
 - Every page, renew, clear and timeout is logged with the time, the station
   and the client address. Tech can see the log at `/admin`.
+
+## Clear all pages from Companion
+
+At `/admin` → Companion, generate a key. Then add a Bitfocus Companion button
+with the **Generic HTTP** module:
+
+- **Action:** HTTP POST
+- **URL:** the one `/admin` shows,
+  `http://<server>:8522/api/integrations/clear-all?key=<key>`
+- **Body:** empty
+
+It responds with `{"cleared": <number>}`, and the log records each cleared code
+with station "Companion". The key can also go in an `X-Paging-Key` header
+instead of the URL. Generating a new key stops the old one working.
 
 ## Develop
 

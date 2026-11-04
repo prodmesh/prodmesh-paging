@@ -34,12 +34,13 @@ export async function api(method, path, { body, token } = {}) {
 }
 
 // One EventSource carrying named topics, same frame shape as ProdMesh-Control.
-// The server pings every 5 s; hearing nothing for WATCHDOG_MS means the link is
+// `onBeat` fires on every frame, pings included (the key page's heartbeat).
+// The server pings every 2 s; hearing nothing for WATCHDOG_MS means the link is
 // dead even if the socket hasn't noticed (a pulled cable can take minutes to
 // error), so we report "down" and reconnect ourselves.
 const WATCHDOG_MS = 12_000;
 
-export function connect(topics, { onTopic, onStatus }) {
+export function connect(topics, { onTopic, onStatus, onBeat }) {
   let es = null;
   let watchdog = null;
   let up = null;
@@ -50,6 +51,7 @@ export function connect(topics, { onTopic, onStatus }) {
 
   function alive() {
     setUp(true);
+    onBeat?.();
     clearTimeout(watchdog);
     watchdog = setTimeout(restart, WATCHDOG_MS);
   }

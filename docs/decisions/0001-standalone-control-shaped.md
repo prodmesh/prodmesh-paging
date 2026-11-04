@@ -107,3 +107,21 @@ Parents read their own sticker against the screen, so a lookalike is
 unlikely to send the wrong parent, and the volunteers preferred fewer refusals.
 The clear endpoint now URL-decodes its path segment, since a code may contain
 characters such as `#` or `/`.
+
+## Addendum — Companion, blocked codes, heartbeat (2026-11-04)
+
+- **`POST /api/integrations/clear-all`** for a Bitfocus Companion button.
+  Companion's Generic HTTP module can't do our PIN login, so this uses one
+  shared **integration key**. It's generated at `/admin`, shown once, and
+  stored only as a hash. It can clear all pages and nothing else. Wrong keys
+  count toward the same per-address lockout as wrong PINs. The endpoint is
+  POST only, so a link preview or prefetch can never clear the screens.
+- **Blocked codes.** A short built-in list (`server/blocked-words.js`) plus
+  tech's additions in the data folder, so they survive `git pull`. There are
+  deliberately no spelling variants. Words of 3 letters or fewer match only
+  the whole code, because short words hide inside random sticker codes and a
+  real child's code must never be refused. Longer words match anywhere.
+- **Heartbeat.** An optional white square on the key output that flips on
+  every frame from the server. The ping interval drops from 5 s to 2 s so it
+  visibly blinks. It's drawn only while connected: a square frozen *on* would
+  look healthy on the multiview, so offline draws nothing, as before.

@@ -22,12 +22,32 @@ const PLACES = {
   center: [{ center: true, align: 'center' }],
 };
 
-export function renderKey(frame, code, display) {
+// `beat` is the heartbeat square's current state: true draws it, false
+// leaves its corner black. The caller flips it on every server message.
+export function renderKey(frame, code, display, beat = false) {
   frame.replaceChildren();
-  if (!code || !display) return;
-  for (const place of PLACES[display.position] ?? PLACES['top-right']) {
-    frame.append(drawBox(place, code, display));
+  if (!display) return;
+  if (code) {
+    for (const place of PLACES[display.position] ?? PLACES['top-right']) {
+      frame.append(drawBox(place, code, display));
+    }
   }
+  const hb = display.heartbeat;
+  if (hb?.enabled && beat) frame.append(drawHeartbeat(hb));
+}
+
+// Pure white, like everything else on this frame. It belongs outside the
+// keyer's mask, so it shows on the multiview and never on the projectors.
+function drawHeartbeat(hb) {
+  const dot = document.createElement('div');
+  dot.className = 'key-heartbeat';
+  const size = `${hb.sizeVh}cqh`;
+  const margin = `${hb.marginVh}cqh`;
+  Object.assign(dot.style, { width: size, height: size });
+  const [v, h] = hb.position.split('-');
+  dot.style[v] = margin;
+  dot.style[h] = margin;
+  return dot;
 }
 
 function drawBox(place, code, display) {

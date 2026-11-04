@@ -83,6 +83,23 @@
         <div><label class="inline" style="margin-top:38px"><input id="showLabel" type="checkbox"> Show label</label></div>
       </div>
 
+      <h2 style="margin-top:20px">Heartbeat</h2>
+      <p class="note">A small white square that blinks every 2 seconds while the key page is connected, and disappears when it isn't. Put it outside the keyer's mask, so it shows on the multiview but never on the projectors.</p>
+      <div class="row">
+        <div><label class="inline" style="margin-top:38px"><input id="hbEnabled" type="checkbox"> Show heartbeat</label></div>
+        <div>
+          <label for="hbPosition">Corner</label>
+          <select id="hbPosition">
+            <option value="bottom-right">Bottom right</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="top-right">Top right</option>
+            <option value="top-left">Top left</option>
+          </select>
+        </div>
+        <div><label for="hbSizeVh">Size (% of height)</label><input id="hbSizeVh" type="number" min="0.5" max="10" step="0.5"></div>
+        <div><label for="hbMarginVh">Edge margin (% of height)</label><input id="hbMarginVh" type="number" min="0" max="20" step="0.5"></div>
+      </div>
+
       <label>Preview (unsaved changes show here first)</label>
       <div id="preview" class="key-frame preview"></div>
       <p class="note">To set up the ATEM key without a real page, open <code id="url-test"></code> on the output machine.</p>
@@ -90,6 +107,25 @@
       <button type="submit" style="margin-top:12px">Save settings</button>
       <span id="config-flash" class="flash" style="margin-left:12px"></span>
     </form>
+
+    <div class="panel">
+      <h2>Blocked codes</h2>
+      <p class="note"><span id="blocked-builtin"></span> common words are blocked already (in <code>server/blocked-words.js</code>). Add more here, one per line. Words of 3 letters or fewer block only that exact code; longer words block any code that contains them.</p>
+      <textarea id="blocked-words" rows="5" spellcheck="false" style="width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);text-transform:uppercase"></textarea>
+      <button id="save-blocked" type="button" class="secondary" style="margin-top:10px">Save blocked codes</button>
+      <span id="blocked-flash" class="flash" style="margin-left:12px"></span>
+    </div>
+
+    <div class="panel">
+      <h2>Companion</h2>
+      <p class="note">Lets a Bitfocus Companion button (Generic HTTP, POST) clear every page. Status: <strong id="ik-status"></strong></p>
+      <button id="new-key" type="button" class="secondary">Generate a new key</button>
+      <div id="ik-result" hidden>
+        <p class="note">Copy this now; it's shown only once. A new key replaces the old one.</p>
+        <label>POST URL for the Companion button</label>
+        <input id="ik-url" readonly>
+      </div>
+    </div>
 
     <div class="panel">
       <h2>PINs</h2>
@@ -135,7 +171,11 @@
 
   function show(which) {
     for (const s of ['setup', 'login', 'admin']) $(s).hidden = s !== which;
-    if (which === 'admin') loadLog();
+    if (which === 'admin') {
+      loadLog();
+      loadBlocked();
+      loadKeyStatus();
+    }
   }
 
   function loggedOut() {
@@ -185,6 +225,12 @@
         marginVh: Number($('marginVh').value),
         label: $('label').value,
         showLabel: $('showLabel').checked,
+        heartbeat: {
+          enabled: $('hbEnabled').checked,
+          position: $('hbPosition').value,
+          sizeVh: Number($('hbSizeVh').value),
+          marginVh: Number($('hbMarginVh').value),
+        },
       },
     };
   }
@@ -197,12 +243,17 @@
     $('marginVh').value = c.display.marginVh;
     $('label').value = c.display.label;
     $('showLabel').checked = c.display.showLabel;
+    $('hbEnabled').checked = c.display.heartbeat.enabled;
+    $('hbPosition').value = c.display.heartbeat.position;
+    $('hbSizeVh').value = c.display.heartbeat.sizeVh;
+    $('hbMarginVh').value = c.display.heartbeat.marginVh;
     drawPreview();
   }
 
   // A full-length sample, so size and margins are judged on the widest code
   // that can go out (codes are up to 5 characters).
-  const drawPreview = () => renderKey($('preview'), 'W0M8O', formConfig().display);
+  // The heartbeat is drawn "on" so its placement can be judged.
+  const drawPreview = () => renderKey($('preview'), 'W0M8O', formConfig().display, true);
 
   $('config-form').addEventListener('input', () => {
     dirty = true;
@@ -243,6 +294,42 @@
       loadLog();
     });
   }
+
+  // ── Blocked codes ──
+
+  async function loadBlocked() {
+    const r = await api('GET', '/api/blocked-words', { token });
+    if (r.status === 401) return loggedOut();
+    $('blocked-builtin').textContent = r.data.builtIn;
+    $('blocked-words').value = (r.data.extra ?? []).join('\n');
+  }
+
+  $('save-blocked').addEventListener('click', async () => {
+    const words = $('blocked-words').value.split(/[\n,]+/);
+    const r = await api('PUT', '/api/blocked-words', { body: { words }, token });
+    if (r.status === 401) return loggedOut();
+    $('blocked-words').value = (r.data.extra ?? []).join('\n');
+    $('blocked-flash').textContent = r.ok ? 'Saved.' : r.data.error;
+  });
+
+  // ── Companion key ──
+
+  async function loadKeyStatus() {
+    const r = await api('GET', '/api/session', { token });
+    $('ik-status').textContent = r.data.integrationKeySet ? 'a key is set' : 'no key yet';
+  }
+
+  $('new-key').addEventListener('click', async () => {
+    if ($('ik-status').textContent === 'a key is set' &&
+        !confirm('Replace the current key? Companion buttons using it will stop working.')) return;
+    const r = await api('POST', '/api/integration-key', { token });
+    if (r.status === 401) return loggedOut();
+    $('ik-url').value = `${location.origin}/api/integrations/clear-all?key=${r.data.key}`;
+    $('ik-result').hidden = false;
+    $('ik-url').select();
+    loadKeyStatus();
+    loadLog();
+  });
 
   // ── Log ──
 
