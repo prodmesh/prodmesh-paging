@@ -21,4 +21,11 @@ if command -v raspi-config >/dev/null && raspi-config nonint is_pi; then
   fi
 fi
 
+# Transparent cursors (deploy/pi/blank-cursor.sh). Without -m, labwc reads only
+# the first environment file it finds (~/.config/labwc/environment), which
+# doesn't set a cursor theme, so this one stands.
+if [ -d /usr/share/icons/prodmesh-blank ]; then
+  export XCURSOR_THEME=prodmesh-blank XCURSOR_SIZE=24
+fi
+
 exec /usr/bin/labwc

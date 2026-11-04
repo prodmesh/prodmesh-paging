@@ -117,6 +117,7 @@ EOF
   LIGHTDM=/etc/lightdm/lightdm.conf
   if [ -f "$LIGHTDM" ] && [ -d /usr/share/wayland-sessions ]; then
     chmod +x "$DIR/deploy/pi/kiosk-session.sh"
+    bash "$DIR/deploy/pi/blank-cursor.sh"
     sed -e "s#@DIR@#$DIR#g" "$DIR/deploy/pi/prodmesh-kiosk.desktop" \
       > /usr/share/wayland-sessions/prodmesh-kiosk.desktop
     if grep -q '^autologin-session=' "$LIGHTDM"; then
