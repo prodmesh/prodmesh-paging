@@ -123,6 +123,36 @@ On the nursery computer, open `http://paging.local:8522/`, enter the nursery
 PIN, and make that page the browser's home page. If the computer is a
 dedicated kiosk, put that browser in full-screen or kiosk mode too.
 
+## Small Pis (Zero 2 W)
+
+A Zero 2 W has 512 MB of RAM and no Ethernet port. It works, but:
+
+- **The desktop is already trimmed.** `install.sh` creates
+  `~/.config/labwc/autostart`, and labwc runs that file *instead of* the
+  system one. So after the reboot the wallpaper/file manager, the taskbar and
+  the desktop autostart apps never start; only the kiosk does.
+- **Turn off services you don't need:**
+
+  ```bash
+  sudo ./deploy/pi/slim.sh
+  ```
+
+  This turns off Bluetooth, printing, NFS, USB auto-mounting and ModemManager,
+  plus Wi-Fi power save (which otherwise adds lag to the live stream). It
+  keeps avahi, which `paging.local` needs. It's slow on a Zero: allow several
+  minutes.
+- **Wi-Fi with a static IP.** Add the production network as an *extra*
+  NetworkManager profile with a higher priority instead of editing the one
+  you set up with. If the new settings are wrong, the Pi falls back to the old
+  network rather than vanishing:
+
+  ```bash
+  read -rs -p "Wi-Fi password: " PSK; echo; sudo nmcli connection add type wifi con-name CHCC-Internal ifname wlan0 ssid CHCC-Internal wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" ipv4.method manual ipv4.addresses 192.168.132.95/23 ipv4.gateway 192.168.132.1 ipv4.dns 192.168.132.1 802-11-wireless.powersave 2 connection.autoconnect-priority 10; unset PSK
+  ```
+
+  The password is read without being shown and never lands in your shell
+  history. Use an address outside the router's DHCP pool. Reboot to switch.
+
 ## Updating
 
 ```bash
