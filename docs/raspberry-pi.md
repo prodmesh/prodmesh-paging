@@ -127,10 +127,15 @@ dedicated kiosk, put that browser in full-screen or kiosk mode too.
 
 A Zero 2 W has 512 MB of RAM and no Ethernet port. It works, but:
 
-- **The desktop is already trimmed.** `install.sh` creates
-  `~/.config/labwc/autostart`, and labwc runs that file *instead of* the
-  system one. So after the reboot the wallpaper/file manager, the taskbar and
-  the desktop autostart apps never start; only the kiosk does.
+- **The desktop is already trimmed.** `install.sh` makes autologin start a
+  kiosk-only session (`deploy/pi/kiosk-session.sh`): labwc without the Pi
+  desktop's `-m`, so the wallpaper, taskbar and desktop apps never start,
+  only the kiosk does. Logging in at the Pi's own login screen still gives
+  the normal desktop. To autologin to the desktop again, set
+  `autologin-session=rpd-labwc` in `/etc/lightdm/lightdm.conf`.
+- **Chromium's low-RAM dialog is skipped.** The Pi's `chromium` launcher asks
+  "launch anyway?" on boards under 1 GB, and would wait on the key output
+  forever. `kiosk.sh` passes `--no-memcheck`.
 - **Turn off services you don't need:**
 
   ```bash

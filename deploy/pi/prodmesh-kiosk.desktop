@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=ProdMesh Paging kiosk
+Comment=Only the paging key output; see deploy/pi/kiosk-session.sh
+Exec=@DIR@/deploy/pi/kiosk-session.sh

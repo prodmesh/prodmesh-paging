@@ -2,10 +2,7 @@
 # Optional: free RAM on a small Pi (Zero 2 W, 512 MB) that only does paging.
 # Run after install.sh:  sudo ./deploy/pi/slim.sh
 #
-# The desktop itself is already trimmed by install.sh. Because it creates
-# ~/.config/labwc/autostart, labwc runs that file *instead of*
-# /etc/xdg/labwc/autostart, so the file manager/wallpaper, the taskbar,
-# kanshi and the XDG autostart apps never start. Only the kiosk does.
+# The desktop itself is trimmed by install.sh (kiosk-only autologin session).
 #
 # This script turns off system services a paging box doesn't need. It keeps
 # avahi, because paging.local depends on it. To undo one later:

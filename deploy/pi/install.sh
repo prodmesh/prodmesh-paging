@@ -111,6 +111,24 @@ EOF
     echo "raspi-config not found: disable screen blanking and enable desktop autologin by hand." >&2
   fi
 
+  # Autologin into the kiosk-only session instead of the full desktop. Runs
+  # after raspi-config, which rewrites autologin-session to the desktop.
+  # To go back: set autologin-session=rpd-labwc in /etc/lightdm/lightdm.conf.
+  LIGHTDM=/etc/lightdm/lightdm.conf
+  if [ -f "$LIGHTDM" ] && [ -d /usr/share/wayland-sessions ]; then
+    chmod +x "$DIR/deploy/pi/kiosk-session.sh"
+    sed -e "s#@DIR@#$DIR#g" "$DIR/deploy/pi/prodmesh-kiosk.desktop" \
+      > /usr/share/wayland-sessions/prodmesh-kiosk.desktop
+    if grep -q '^autologin-session=' "$LIGHTDM"; then
+      sed -i 's/^autologin-session=.*/autologin-session=prodmesh-kiosk/' "$LIGHTDM"
+    else
+      sed -i '/^\[Seat:\*\]/a autologin-session=prodmesh-kiosk' "$LIGHTDM"
+    fi
+    echo "Autologin now starts the kiosk-only session."
+  else
+    echo "lightdm not found: the kiosk will run inside the full desktop." >&2
+  fi
+
   if ! command -v wlr-randr >/dev/null; then
     apt-get install -y wlr-randr >/dev/null && echo "Installed wlr-randr."
   fi

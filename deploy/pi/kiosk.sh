@@ -46,9 +46,13 @@ fi
 
 # --incognito: no "restore pages?" bar after a power cut. The key page keeps
 # nothing in browser storage, so nothing is lost.
+# --no-memcheck: skip the Pi launcher's "less than 1GB of RAM" dialog, which
+# waits for a click and would sit on the key output forever on a Zero 2 W.
+# --renderer-process-limit=1: one page, one renderer; saves RAM.
 # The loop relaunches Chromium if it ever exits or crashes.
 while true; do
   "$BROWSER" \
+    --no-memcheck \
     --kiosk \
     --incognito \
     --noerrdialogs \
@@ -59,6 +63,7 @@ while true; do
     --disable-features=Translate,MediaRouter \
     --check-for-update-interval=31536000 \
     --password-store=basic \
+    --renderer-process-limit=1 \
     "$KEY_URL"
   log "Chromium exited ($?); relaunching"
   sleep 2
